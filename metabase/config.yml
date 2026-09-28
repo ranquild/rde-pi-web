@@ -1,0 +1,28 @@
+# Metabase config file: https://www.metabase.com/docs/latest/configuring-metabase/config-file
+
+version: 1
+config:
+  settings:
+    check-for-updates: false
+    anon-tracking-enabled: false
+    load-sample-content: true
+  users:
+    - first_name: Admin
+      last_name: User
+      email: "{{ env MB_ADMIN_EMAIL }}"
+      password: "{{ env MB_ADMIN_PASSWORD }}"
+      is_superuser: true
+  api-keys:
+    - name: pi-web
+      group: admin
+      creator: "{{ env MB_ADMIN_EMAIL }}"
+      key: "{{ env MB_API_KEY }}"
+  # databases:
+  #   - name: Warehouse
+  #     engine: postgres
+  #     details:
+  #       host: warehouse.example.com
+  #       port: 5432
+  #       dbname: warehouse
+  #       user: metabase
+  #       password: "{{ env WAREHOUSE_PASSWORD }}"

@@ -1,0 +1,92 @@
+services:
+  metabase-appdb:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: metabase
+      POSTGRES_PASSWORD: metabase
+      POSTGRES_DB: metabase
+    volumes:
+      - metabase-appdb-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metabase -d metabase"]
+      interval: 5s
+      retries: 20
+
+  metabase:
+    image: metabase/metabase-enterprise:latest
+    restart: unless-stopped
+    depends_on:
+      metabase-appdb:
+        condition: service_healthy
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_HOST: metabase-appdb
+      MB_DB_PORT: 5432
+      MB_DB_DBNAME: metabase
+      MB_DB_USER: metabase
+      MB_DB_PASS: metabase
+      MB_CONFIG_FILE_PATH: /config/config.yml
+      MB_PREMIUM_EMBEDDING_TOKEN: ${MB_PREMIUM_EMBEDDING_TOKEN:?set MB_PREMIUM_EMBEDDING_TOKEN in .env}
+      MB_ADMIN_EMAIL: ${MB_ADMIN_EMAIL}
+      MB_ADMIN_PASSWORD: ${MB_ADMIN_PASSWORD}
+      MB_API_KEY: ${MB_API_KEY:?set MB_API_KEY in .env}
+    volumes:
+      - ./metabase/config.yml:/config/config.yml:ro
+    ports:
+      - "127.0.0.1:${MB_JETTY_PORT}:3000"
+    networks: [default, pi-web]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health || exit 1"]
+      interval: 5s
+      retries: 60
+      start_period: 60s
+
+  pi-web:
+    build:
+      context: ./pi-web
+    restart: unless-stopped
+    init: true
+    depends_on:
+      metabase:
+        condition: service_healthy
+      pi-web-proxy:
+        condition: service_started
+    environment:
+      PI_DEFAULT_MODEL: ${PI_DEFAULT_MODEL:?set PI_DEFAULT_MODEL in .env}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      MB_API_KEY: ${MB_API_KEY:?set MB_API_KEY in .env}
+      HTTPS_PROXY: http://pi-web-proxy:8888
+      HTTP_PROXY: http://pi-web-proxy:8888
+      NO_PROXY: metabase,localhost,127.0.0.1
+    volumes:
+      - workspace:/workspace
+      - pi-sessions:/home/node/.pi/agent/sessions
+    networks: [pi-web]
+
+  pi-web-proxy:
+    build:
+      context: ./pi-web-proxy
+    restart: unless-stopped
+    networks: [default, pi-web]
+
+  pi-web-ui:
+    image: alpine/socat:latest
+    restart: unless-stopped
+    command: TCP-LISTEN:30141,fork,reuseaddr TCP:pi-web:30141
+    depends_on: [pi-web]
+    ports:
+      - "127.0.0.1:${PI_WEB_PORT}:30141"
+    networks: [default, pi-web]
+
+networks:
+  pi-web:
+    internal: true
+
+volumes:
+  metabase-appdb-data:
+  workspace:
+  pi-sessions:
